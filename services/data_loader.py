@@ -186,7 +186,7 @@ def _load() -> pd.DataFrame:
     global _df_cache
     if _df_cache is not None:
         return _df_cache.copy()
-    query = "SELECT * FROM test_db"
+    query = "SELECT * FROM scadadb"
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
     # data_file = engine.connect().execute(text("SELECT * FROM test_db"))

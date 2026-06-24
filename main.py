@@ -7,7 +7,7 @@ from database import engine
 from sqlalchemy import text
 import traceback
 
-from routes import kpi, filters, spikes, data
+from routes import kpi,  health, anamolies
 
 
 app = FastAPI(title="SCADA Intelligence Dashboard")
@@ -24,10 +24,18 @@ app.add_middleware(
 # IMPORTANT: Each router file must use @router.get("/") or @router.get("/{id}")
 # — NOT @router.get("/kpi/") — because the prefix below already adds that path.
 app.include_router(kpi.router,     prefix="/kpi")
-app.include_router(filters.router, prefix="/filters")
-app.include_router(spikes.router,  prefix="/spikes")
-app.include_router(data.router,    prefix="/data")
+# app.include_router(filters.router, prefix="/filters")
+# app.include_router(spikes.router,  prefix="/spikes")
+# app.include_router(data.router,    prefix="/data")
+app.include_router(
+    health.router,
+    prefix="/health_index"
+)
 
+app.include_router(
+    anamolies.router,
+    prefix="/anomalies"
+)
 # ── Static files ─────────────────────────────────────────────────────────────
 static_dir = Path(__file__).parent / "static"
 
