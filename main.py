@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
-from database import engine
+from services.database import engine
 from sqlalchemy import text
 import traceback
 
-from routes import kpi,  health, anamolies
+from routes import kpi,  health, anamolies, filters, data
 
 
 app = FastAPI(title="SCADA Intelligence Dashboard")
@@ -24,9 +24,9 @@ app.add_middleware(
 # IMPORTANT: Each router file must use @router.get("/") or @router.get("/{id}")
 # — NOT @router.get("/kpi/") — because the prefix below already adds that path.
 app.include_router(kpi.router,     prefix="/kpi")
-# app.include_router(filters.router, prefix="/filters")
+app.include_router(filters.router, prefix="/filters")
+app.include_router(data.router,    prefix="/data")
 # app.include_router(spikes.router,  prefix="/spikes")
-# app.include_router(data.router,    prefix="/data")
 app.include_router(
     health.router,
     prefix="/health_index"

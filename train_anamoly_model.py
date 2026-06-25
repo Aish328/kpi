@@ -2,7 +2,7 @@ import pandas as pd
 import joblib
 
 from sqlalchemy import text
-from database import engine
+from services.database import engine
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest

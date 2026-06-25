@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 from typing import Optional
-from services.database import engine
+from database import engine
 from sqlalchemy import create_engine, text
 # DATA_PATH = Path(__file__).parent.parent / "data" / "data.csv"
 # XLSX_PATH = Path(__file__).parent.parent / "data" / "MAIIN_DATA.xlsx"
@@ -186,7 +186,7 @@ def _load() -> pd.DataFrame:
     global _df_cache
     if _df_cache is not None:
         return _df_cache.copy()
-    query = "SELECT * FROM scada_db"
+    query = "SELECT * FROM scadadb"
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
     # data_file = engine.connect().execute(text("SELECT * FROM test_db"))
@@ -264,11 +264,6 @@ class DataLoader:
     @staticmethod
     def count_incidents(series: pd.Series) -> int:
         return int((series.fillna(0) > 0).sum())
-
-    @staticmethod
-    def count_runs(series: pd.Series) -> int:
-        s = series.fillna(0).astype(int)
-        return int(((s == 1) & (s.shift(fill_value=0) != 1)).sum())
 
     @staticmethod
     def infer_interval() -> float:

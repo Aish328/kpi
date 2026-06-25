@@ -2,7 +2,7 @@ from fastapi import APIRouter
 import pandas as pd
 from sqlalchemy import text
 
-from database import engine
+from services.database import engine
 from services.health_engine import compute_health
 
 router = APIRouter()

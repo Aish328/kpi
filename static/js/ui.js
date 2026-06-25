@@ -137,11 +137,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   /* ── KPI update ───────────────────────────────────────────────────────── */
-  async function updateKpis(substation, feeder) {
+  async function updateKpis(substation, feeder, limit = 96) {
     setKpiLoading();
     let k;
     try {
-      k = await ApiService.getKpis(substation, feeder);
+      k = await ApiService.getKpis(substation, feeder, limit);
     } catch (err) {
       console.error("[ui] KPI fetch failed:", err);
       document.querySelectorAll(".tile-value").forEach(el => {
@@ -177,8 +177,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   /* ── Full refresh ─────────────────────────────────────────────────────── */
   async function updateDashboard(substation, feeder) {
+    const limit = 96;
     await Promise.all([
-      updateKpis(substation, feeder),
+      updateKpis(substation, feeder, limit),
       createCharts(substation, feeder),
     ]);
     updateMap(substation);
