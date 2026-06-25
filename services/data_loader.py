@@ -2,6 +2,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional
 from services.database import engine
+from services.threshold_engine import get_thresholds
 from sqlalchemy import create_engine, text
 # DATA_PATH = Path(__file__).parent.parent / "data" / "data.csv"
 # XLSX_PATH = Path(__file__).parent.parent / "data" / "MAIIN_DATA.xlsx"
@@ -98,7 +99,10 @@ def _compute_episodes(flag_series: pd.Series, value_series: pd.Series, interval_
     return ep_id, ep_dur
 
 
-def _derive_kpis(df: pd.DataFrame) -> pd.DataFrame:
+def _derive_kpis(df: pd.DataFrame, thresholds: dict | None = None) -> pd.DataFrame:
+    if thresholds is None:
+        thresholds = get_thresholds(df)
+
     interval = _infer_interval_minutes(df)
     print(f"  Inferred reading interval: {interval:.1f} min")
 
@@ -112,8 +116,8 @@ def _derive_kpis(df: pd.DataFrame) -> pd.DataFrame:
         df["fvsm"] = vdf.mean(axis=1).round(3)
 
         # Binary flags
-        df["fvhi"] = (v_max > VOLTAGE_HIGH).astype(int)
-        df["fvli"] = (v_min < VOLTAGE_LOW).astype(int)
+        df["fvhi"] = (v_max > thresholds["VHIGH"]).astype(int)
+        df["fvli"] = (v_min < thresholds["VLOW"]).astype(int)
 
         # Episode id + duration per episode — per (substation,feeder) group
         df["fvhi_ep"]  = 0;  df["fvhd"] = 0.0
@@ -141,8 +145,8 @@ def _derive_kpis(df: pd.DataFrame) -> pd.DataFrame:
         c_min = cdf.min(axis=1)
         df["fcsm"] = cdf.mean(axis=1).round(3)
 
-        df["fchi"] = (c_max > CURRENT_HIGH).astype(int)
-        df["fcli"] = (c_min < CURRENT_LOW).astype(int)
+        df["fchi"] = (c_max > thresholds["IHIGH"]).astype(int)
+        df["fcli"] = (c_min < thresholds["ILOW"]).astype(int)
 
         df["fchi_ep"]  = 0;  df["fchd"] = 0.0
         df["fcli_ep"]  = 0;  df["fcld"] = 0.0
@@ -163,6 +167,14 @@ def _derive_kpis(df: pd.DataFrame) -> pd.DataFrame:
             if col not in df.columns: df[col] = 0
 
     return df
+
+
+def derive_thresholded_data(df: pd.DataFrame, thresholds: dict | None = None):
+    df = df.copy()
+    if thresholds is None:
+        thresholds = get_thresholds(df)
+    return _derive_kpis(df, thresholds), thresholds
+
 
 def parse_active_load(x):
     if pd.isna(x):
@@ -260,6 +272,13 @@ class DataLoader:
         if date_to:
             df = df[df["datetime"] <= pd.to_datetime(date_to)]
         return df
+
+    @staticmethod
+    def derive_thresholded_data(df: pd.DataFrame, thresholds: dict | None = None):
+        df = df.copy()
+        if thresholds is None:
+            thresholds = get_thresholds(df)
+        return _derive_kpis(df, thresholds), thresholds
 
     @staticmethod
     def count_incidents(series: pd.Series) -> int:

@@ -32,6 +32,7 @@ def get_chart_series(
         return EMPTY
 
     df = df.sort_values("datetime").tail(limit)
+    df, thresholds = DataLoader.derive_thresholded_data(df)
     cats = df["datetime"].dt.strftime("%Y-%m-%d %H:%M").tolist()
 
     def col(name):
@@ -48,9 +49,7 @@ def get_chart_series(
     volt_cols = [c for c in ["vry", "vyb", "vbr"] if c in df.columns]
     curr_cols = [c for c in ["ir", "iy", "ib"] if c in df.columns]
     v_avg = df[volt_cols].mean(axis=1).round(3).tolist() if volt_cols else [None]*len(df)
-    i_avg = df[curr_cols].mean(axis=1).round(3).tolist() if curr_cols else [None]*len(df)
-
-    from services.data_loader import VOLTAGE_HIGH, VOLTAGE_LOW, CURRENT_HIGH, CURRENT_LOW
+    i_avg = df[curr_cols].mean(axis=1).round(3).tolist() if curr_cols else [None] * len(df)
 
     return {
         "categories": cats,
@@ -64,6 +63,6 @@ def get_chart_series(
         "fvhd": col("fvhd"), "fvld": col("fvld"),
         "fchd": col("fchd"), "fcld": col("fcld"),
         # threshold reference lines
-        "voltage_high": VOLTAGE_HIGH, "voltage_low": VOLTAGE_LOW,
-        "current_high": CURRENT_HIGH, "current_low":  CURRENT_LOW,
+        "voltage_high": thresholds["VHIGH"], "voltage_low": thresholds["VLOW"],
+        "current_high": thresholds["IHIGH"], "current_low": thresholds["ILOW"],
     }
