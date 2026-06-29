@@ -15,6 +15,9 @@ def get_kpis(
     df = DataLoader.get_all_data()
     df = DataLoader.filter_data(df, substation=substation, feeder=feeder)
     df = df.sort_values("datetime").tail(limit)
+    # Recompute thresholded KPIs for the selected window so card calculations
+    # match the chart series (same flags, episode ids and durations).
+    df, thresholds = DataLoader.derive_thresholded_data(df)
     if df.empty:
         return {
             "fvhi_count": 0,
