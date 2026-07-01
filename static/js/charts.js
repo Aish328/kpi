@@ -4,30 +4,47 @@
  *   • Static threshold reference lines (HIGH / LOW)
  *   • Anomaly regions shaded via Chart.js plugin
  *   • Tooltip shows value + whether anomaly + episode duration
+ *
+ * LIGHT-THEME FIX: legend/axis text is now dark ink (readable on the
+ * white cards) instead of the near-white colours left over from the
+ * dark theme — that's why labels were invisible.
+ * GRIDLINES: background grid lines are switched off; axis ticks remain.
+ * EXPAND-ON-CLICK: every chart canvas is clickable. Clicking opens a
+ * full-screen modal re-rendering the same chart larger, for detailed
+ * reading. Click the backdrop, the × button, or press Esc to close.
  */
 
 const _charts = {};
+const _chartConfigs = {}; // id -> { type, data, options } for the modal to reuse
+
+const F = "'IBM Plex Mono', monospace";
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 const C = {
-  vry:    "#00e5d4",
-  vyb:    "#e040fb",
-  vbr:    "#ffab40",
-  v_avg:  "#b2ff59",
-  ir:     "#40c4ff",
-  iy:     "#ff6e40",
-  ib:     "#ea80fc",
-  i_avg:  "#ccff90",
-  high:   "rgba(255,80,80,0.18)",
-  low:    "rgba(80,120,255,0.18)",
-  thresh_high: "#ff5252",
-  thresh_low:  "#448aff",
-  grid:   "rgba(100,80,200,0.12)",
-  tick:   "#7a6fa0",
+  // series (kept vivid — still read clearly on white)
+  vry:    "#0f9e90",
+  vyb:    "#a63fbf",
+  vbr:    "#d9762f",
+  v_avg:  "#5a9c1f",
+  ir:     "#1c78c9",
+  iy:     "#c9591c",
+  ib:     "#a63fbf",
+  i_avg:  "#5a9c1f",
+
+  // anomaly shading + thresholds
+  high:   "rgba(168,52,31,0.10)",
+  low:    "rgba(28,120,201,0.10)",
+  thresh_high: "#a8341f",
+  thresh_low:  "#1c78c9",
+
+  // chrome — tuned for the light card surface
+  grid:      "rgba(28,26,21,0.06)",  // faint, used only if grid re-enabled
+  tick:      "#726c5b",              // axis numbers = --text-mut
+  axisTitle: "#4a4536",              // axis titles — darker than ticks
+  legend:    "#1c1a15",              // legend labels = --text-pri
 };
 
 // ── Anomaly shading plugin ────────────────────────────────────────────────────
-// Draws coloured bands behind the line for every anomaly row.
 const anomalyShadingPlugin = {
   id: "anomalyShading",
   beforeDatasetsDraw(chart) {
@@ -68,8 +85,7 @@ const anomalyShadingPlugin = {
 };
 
 Chart.register(anomalyShadingPlugin);
-// console.log(labels);
-// console.log(values);
+
 // ── Base chart options ────────────────────────────────────────────────────────
 function _baseOpts(yLabel, anomalyFlags, anomalyColor, extraAnnotations) {
   return {
@@ -80,9 +96,11 @@ function _baseOpts(yLabel, anomalyFlags, anomalyColor, extraAnnotations) {
     _anomaly: { anomalyFlags, anomalyColor },
     plugins: {
       legend: {
-        labels: { color: "#e8e0ff", font: { family: "Share Tech Mono", size: 10 }, boxWidth: 12 },
+        labels: { color: C.legend, font: { family: F, size: 11 }, boxWidth: 12 },
       },
       tooltip: {
+        titleFont: { family: F },
+        bodyFont:  { family: F },
         callbacks: {
           afterBody(items) {
             const idx = items[0]?.dataIndex;
@@ -103,17 +121,17 @@ function _baseOpts(yLabel, anomalyFlags, anomalyColor, extraAnnotations) {
       x: {
         ticks: {
           color: C.tick,
-          font: { size: 9, family: "Share Tech Mono" },
+          font: { size: 10, family: F },
           maxRotation: 45,
           autoSkip: true,
           maxTicksLimit: 10,
         },
-        grid: { color: C.grid },
+        grid: { display: false },
       },
       y: {
-        title: { display: true, text: yLabel, color: C.tick, font: { size: 10 } },
-        ticks: { color: C.tick, font: { size: 9 } },
-        grid: { color: C.grid },
+        title: { display: true, text: yLabel, color: C.axisTitle, font: { size: 11, family: F, weight: "600" } },
+        ticks: { color: C.tick, font: { size: 10, family: F } },
+        grid: { display: false },
       },
     },
   };
@@ -149,23 +167,21 @@ function _threshLine(label, value, count, color) {
   };
 }
 
-// ── Destroy + create ──────────────────────────────────────────────────────────
+// ── Destroy + create (also records config + wires click-to-expand) ───────────
 function _make(id, datasets, labels, opts) {
   if (_charts[id]) _charts[id].destroy();
   const ctx = document.getElementById(id);
   if (!ctx) return;
-  _charts[id] = new Chart(ctx, {
-    type: "line",
-    data: { labels, datasets },
-    options: opts,
-  });
+  _chartConfigs[id] = { type: "line", data: { labels, datasets }, options: opts };
+  _charts[id] = new Chart(ctx, { type: "line", data: { labels, datasets }, options: opts });
+  _wireExpand(id);
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 async function createCharts(substation, feeder) {
   let s;
   try {
-    s = await ApiService.getChartSeries(substation, feeder,96);
+    s = await ApiService.getChartSeries(substation, feeder, 96);
   } catch (e) {
     console.error("Chart series error:", e);
     return;
@@ -173,13 +189,12 @@ async function createCharts(substation, feeder) {
 
   const lbl = s.categories || [];
   const n   = lbl.length;
-  // CANGED THRESHOLD
   const VH  = s.voltage_high ?? 10.98;
   const VL  = s.voltage_low  ?? 10;
   const IH  = s.current_high ?? 10.98;
   const IL  = s.current_low  ??  10.5;
 
-  // ── Chart 1: Voltage — FVHI (high surge) ─────────────────────────────────
+  // Chart 1: Voltage — FVHI (high surge)
   _make("chart1",
     [
       _ds("VRY", s.vry, C.vry),
@@ -192,11 +207,11 @@ async function createCharts(substation, feeder) {
     _baseOpts("Voltage (V)", s.fvhi_flag, C.high, { durations: s.fvhd })
   );
 
-  // ── Chart 2: FVHD — duration bar of each high-voltage episode ────────────
+  // Chart 2: FVHD duration bars
   _makeBar("chart2", lbl, s.fvhd, "FVHD (min)", C.thresh_high,
     "High-voltage duration shown per row — non-zero rows = part of a surge episode");
 
-  // ── Chart 3: Voltage — FVLI (low dip) ────────────────────────────────────
+  // Chart 3: Voltage — FVLI (low dip)
   _make("chart3",
     [
       _ds("VRY", s.vry, C.vry),
@@ -209,14 +224,13 @@ async function createCharts(substation, feeder) {
     _baseOpts("Voltage (V)", s.fvli_flag, C.low, { durations: s.fvld })
   );
 
-  // ── Chart 4: FVLD ─────────────────────────────────────────────────────────
+  // Chart 4: FVLD
   _makeBar("chart4", lbl, s.fvld, "FVLD (min)", C.thresh_low,
     "Low-voltage duration shown per row");
 
-  // ── Chart 5: Voltage combined ─────────────────────────────────────────────
+  // Chart 5: Voltage combined
   {
-    // Combine both flag arrays for combined shading
-    const both = (s.fvhi_flag || []).map((v, i) => v || (s.fvli_flag||[])[i] || 0);
+    const both = (s.fvhi_flag || []).map((v, i) => v || (s.fvli_flag || [])[i] || 0);
     _make("chart5",
       [
         _ds("VRY", s.vry, C.vry),
@@ -231,7 +245,7 @@ async function createCharts(substation, feeder) {
     );
   }
 
-  // ── Chart 6: Current — FCHI (high surge) ─────────────────────────────────
+  // Chart 6: Current — FCHI (high surge)
   _make("chart6",
     [
       _ds("IR", s.ir, C.ir),
@@ -244,11 +258,11 @@ async function createCharts(substation, feeder) {
     _baseOpts("Current (A)", s.fchi_flag, C.high, { durations: s.fchd })
   );
 
-  // ── Chart 7: FCHD ─────────────────────────────────────────────────────────
+  // Chart 7: FCHD
   _makeBar("chart7", lbl, s.fchd, "FCHD (min)", C.thresh_high,
     "High-current duration shown per row");
 
-  // ── Chart 8: Current — FCLI (low dip) ────────────────────────────────────
+  // Chart 8: Current — FCLI (low dip)
   _make("chart8",
     [
       _ds("IR", s.ir, C.ir),
@@ -261,13 +275,13 @@ async function createCharts(substation, feeder) {
     _baseOpts("Current (A)", s.fcli_flag, C.low, { durations: s.fcld })
   );
 
-  // ── Chart 9: FCLD ─────────────────────────────────────────────────────────
+  // Chart 9: FCLD
   _makeBar("chart9", lbl, s.fcld, "FCLD (min)", C.thresh_low,
     "Low-current duration shown per row");
 
-  // ── Chart 10: Current combined ────────────────────────────────────────────
+  // Chart 10: Current combined
   {
-    const both = (s.fchi_flag || []).map((v, i) => v || (s.fcli_flag||[])[i] || 0);
+    const both = (s.fchi_flag || []).map((v, i) => v || (s.fcli_flag || [])[i] || 0);
     _make("chart10",
       [
         _ds("IR", s.ir, C.ir),
@@ -285,51 +299,151 @@ async function createCharts(substation, feeder) {
 
 // ── Duration bar chart helper ─────────────────────────────────────────────────
 function _makeBar(id, labels, data, label, color, title) {
-  const maxVal = Math.max(...data, 10);
+  const maxVal = Math.max(...(data && data.length ? data : [0]), 10);
   if (_charts[id]) _charts[id].destroy();
   const ctx = document.getElementById(id);
   if (!ctx) return;
-  _charts[id] = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{
-        label,
-        data,
-        backgroundColor: color + "88",
-        borderColor: color,
-        borderWidth: 1,
-        borderRadius: 2,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 300 },
-      plugins: {
-        legend: { labels: { color: "#e8e0ff", font: { size: 10 } } },
-        tooltip: {
-          callbacks: {
-            label: (item) => {
-              const v = item.raw;
-              return v > 0 ? `${label}: ${v} min (part of ${v}-min episode)` : "No anomaly";
-            },
+
+  const type = "bar";
+  const cfgData = {
+    labels,
+    datasets: [{
+      label,
+      data,
+      backgroundColor: color + "88",
+      borderColor: color,
+      borderWidth: 1,
+      borderRadius: 2,
+    }],
+  };
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    plugins: {
+      legend: { labels: { color: C.legend, font: { family: F, size: 11 } } },
+      tooltip: {
+        titleFont: { family: F },
+        bodyFont:  { family: F },
+        callbacks: {
+          label: (item) => {
+            const v = item.raw;
+            return v > 0 ? `${label}: ${v} min (part of ${v}-min episode)` : "No anomaly";
           },
         },
       },
-      scales: {
-        x: {
-          ticks: { color: C.tick, font: { size: 9 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 10 },
-          grid: { color: C.grid },
-        },
-        y: {
-          title: { display: true, text: "Duration (min)", color: C.tick, font: { size: 10 } },
-          ticks: { color: C.tick, font: { size: 9 } },
-          grid: { color: C.grid },
-          beginAtZero: true,
-          suggestedMax: maxVal * 1.15
-        },
+    },
+    scales: {
+      x: {
+        ticks: { color: C.tick, font: { size: 10, family: F }, maxRotation: 45, autoSkip: true, maxTicksLimit: 10 },
+        grid: { display: false },
+      },
+      y: {
+        title: { display: true, text: "Duration (min)", color: C.axisTitle, font: { size: 11, family: F, weight: "600" } },
+        ticks: { color: C.tick, font: { size: 10, family: F } },
+        grid: { display: false },
+        beginAtZero: true,
+        suggestedMax: maxVal * 1.15,
       },
     },
+  };
+
+  _chartConfigs[id] = { type, data: cfgData, options };
+  _charts[id] = new Chart(ctx, { type, data: cfgData, options });
+  _wireExpand(id);
+}
+
+// ================================================================
+// CLICK-TO-EXPAND MODAL
+// ================================================================
+let _modalChart = null;
+
+function _ensureModal() {
+  if (document.getElementById("chartModalOverlay")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "chartModalOverlay";
+  overlay.className = "chart-modal-overlay";
+  overlay.innerHTML = `
+    <div class="chart-modal" role="dialog" aria-modal="true">
+      <div class="chart-modal-header">
+        <span class="chart-modal-title" id="chartModalTitle"></span>
+        <button class="chart-modal-close" id="chartModalClose" aria-label="Close">✕</button>
+      </div>
+      <div class="chart-modal-body">
+        <canvas id="chartModalCanvas"></canvas>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeChartModal();
   });
+  document.getElementById("chartModalClose").addEventListener("click", closeChartModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeChartModal();
+  });
+}
+
+function openChartModal(id) {
+  const cfg = _chartConfigs[id];
+  if (!cfg) return;
+  _ensureModal();
+
+  const overlay = document.getElementById("chartModalOverlay");
+  const titleEl = document.getElementById("chartModalTitle");
+  const card = document.getElementById(id)?.closest(".chart-card, .full-chart");
+  const titleText = card?.querySelector(".chart-title")?.textContent || "Chart detail";
+  titleEl.textContent = titleText;
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+
+  if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+  const modalCtx = document.getElementById("chartModalCanvas");
+
+  // Clone options, scale up font sizes slightly for the larger canvas.
+  const bigOptions = JSON.parse(JSON.stringify(cfg.options));
+  bigOptions._anomaly = cfg.options._anomaly; // functions/arrays lost in JSON clone — restore
+  if (bigOptions.plugins?.legend?.labels) bigOptions.plugins.legend.labels.font.size = 13;
+  if (bigOptions.scales?.x?.ticks) bigOptions.scales.x.ticks.font.size = 12;
+  if (bigOptions.scales?.y?.ticks) bigOptions.scales.y.ticks.font.size = 12;
+  if (bigOptions.scales?.y?.title) bigOptions.scales.y.title.font.size = 13;
+  // tooltip callbacks are functions — JSON clone drops them, restore from original
+  if (cfg.options.plugins?.tooltip?.callbacks) {
+    bigOptions.plugins.tooltip.callbacks = cfg.options.plugins.tooltip.callbacks;
+  }
+
+  // PERFORMANCE: the modal canvas is much larger than the inline one, and on
+  // high-DPI screens Chart.js multiplies that again by devicePixelRatio —
+  // meaning every hover redraw (and the anomaly-shading plugin's fillRects)
+  // does several times more pixel work than the small chart. Cap the DPR and
+  // drop the entrance animation so interaction stays snappy.
+  bigOptions.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+  bigOptions.animation = false;
+  bigOptions.hover = { ...(bigOptions.hover || {}), animationDuration: 0 };
+  bigOptions.responsiveAnimationDuration = 0;
+
+  _modalChart = new Chart(modalCtx, {
+    type: cfg.type,
+    data: cfg.data,
+    options: bigOptions,
+  });
+}
+
+function closeChartModal() {
+  const overlay = document.getElementById("chartModalOverlay");
+  if (!overlay) return;
+  overlay.classList.remove("open");
+  document.body.style.overflow = "";
+  if (_modalChart) { _modalChart.destroy(); _modalChart = null; }
+}
+
+function _wireExpand(id) {
+  const canvas = document.getElementById(id);
+  if (!canvas || canvas.dataset.expandWired) return;
+  canvas.dataset.expandWired = "1";
+  canvas.style.cursor = "zoom-in";
+  canvas.addEventListener("click", () => openChartModal(id));
 }

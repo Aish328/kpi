@@ -1,13 +1,13 @@
 /**
- * ui.js — Dashboard initialisation, filter controls, KPI rendering.
+ * ui.js — Dashboard init, filter controls, KPI rendering.
  *
- * FIX 1: getFilters() is now called ONCE at startup and the result is
- *         passed into renderFeeders() — no second API call on every
- *         substation change.
- * FIX 2: Error banner now shows the full error message + which endpoint
- *         failed, making backend issues immediately visible.
- * FIX 3: updateKpis() has a try/catch that shows a per-section error
- *         instead of leaving all tiles stuck on "…".
+ * NEW BEHAVIOUR:
+ *   • On load the map shows ALL substations as clickable markers.
+ *   • Charts stay hidden behind a hint until a location is chosen.
+ *   • Clicking a marker (or picking the dropdown) reveals + loads that
+ *     substation's KPIs and charts.
+ *   • updateDashboard() pans the map via focusSubstation() instead of
+ *     rebuilding it, so the overview markers survive.
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -15,7 +15,33 @@ document.addEventListener("DOMContentLoaded", async () => {
   const substationSelect = document.getElementById("substationSelect");
   const feederPills      = document.getElementById("feederPills");
   let currentFilters = { substation: null, feeder: null };
-  let _cachedFilters  = null;   // loaded once, reused everywhere
+  let _cachedFilters = null;
+
+  /* ── Show / hide the chart sections ───────────────────────────────────── */
+  const chartSections = () =>
+    document.querySelectorAll(".section-header, .chart-grid, .full-chart");
+  function hideCharts()   { chartSections().forEach(el => el.style.display = "none"); }
+  function revealCharts() { chartSections().forEach(el => el.style.display = ""); }
+
+  function showHint() {
+    if (document.querySelector(".select-hint")) return;
+    const h = document.createElement("div");
+    h.className = "select-hint";
+    h.style.cssText = [
+      "color: var(--text-mut)",
+      "background: var(--bg-tile)",
+      "border: 1px dashed var(--border)",
+      "padding: 14px 18px",
+      "margin: 0 0 16px",
+      "border-radius: 8px",
+      "font-family: 'IBM Plex Mono', monospace",
+      "font-size: 12px",
+      "letter-spacing: .04em",
+    ].join(";");
+    h.textContent = "◉  Select a substation on the map (or from the dropdown) to load its analytics.";
+    document.querySelector(".main").prepend(h);
+  }
+  function clearHint() { document.querySelectorAll(".select-hint").forEach(e => e.remove()); }
 
   /* ── Helpers ──────────────────────────────────────────────────────────── */
   function setKpiLoading() {
@@ -37,18 +63,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  function showBanner(msg, type = "error") {
-    // Remove any existing banner first
+  function showBanner(msg) {
     document.querySelectorAll(".api-error-banner").forEach(b => b.remove());
     const banner = document.createElement("div");
     banner.className = "api-error-banner";
     banner.style.cssText = [
-      "color: #ff5252",
-      "background: rgba(255,82,82,0.08)",
-      "border: 1px solid rgba(255,82,82,0.35)",
+      "color: #f2564d",
+      "background: rgba(242,86,77,0.08)",
+      "border: 1px solid rgba(242,86,77,0.35)",
       "padding: 12px 16px",
       "margin: 12px 0",
-      "font-family: 'Share Tech Mono', monospace",
+      "font-family: 'IBM Plex Mono', monospace",
       "font-size: 12px",
       "border-radius: 4px",
       "white-space: pre-wrap",
@@ -59,13 +84,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   /* ── Load filters (once) ──────────────────────────────────────────────── */
   async function loadFilters() {
-    // Return cached result on subsequent calls
     if (_cachedFilters) return _cachedFilters;
 
     console.log("[ui] Fetching /filters/...");
-    const filters = await ApiService.getFilters();   // throws on error
+    const filters = await ApiService.getFilters();
 
-    // Validate shape — helps catch backend response mismatches early
     if (!filters.substations || !Array.isArray(filters.substations)) {
       throw new Error(
         `/filters/ response missing 'substations' array.\n` +
@@ -81,25 +104,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     _cachedFilters = filters;
 
-    // Populate substation dropdown
+    // Populate dropdown with a placeholder first (nothing is auto-selected).
     substationSelect.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = "— Select substation —";
+    ph.disabled = true;
+    ph.selected = true;
+    substationSelect.appendChild(ph);
+
     filters.substations.forEach(sub => {
       const opt = document.createElement("option");
       opt.value = sub; opt.textContent = sub;
       substationSelect.appendChild(opt);
     });
 
-    if (filters.substations.length > 0) {
-      substationSelect.value    = filters.substations[0];
-      currentFilters.substation = filters.substations[0];
-    }
-
     console.log(`[ui] Loaded ${filters.substations.length} substations`);
     return filters;
   }
 
   /* ── Feeder pills ─────────────────────────────────────────────────────── */
-  // FIX: accepts filters object instead of re-fetching
   function renderFeeders(substation, filters) {
     feederPills.innerHTML = "";
     const feeders = (filters.feeders_by_substation[substation] || []);
@@ -147,7 +171,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       document.querySelectorAll(".tile-value").forEach(el => {
         el.textContent = "ERR";
         el.classList.remove("loading");
-        el.style.color = "#ff5252";
+        el.style.color = "#f2564d";
       });
       showBanner(`KPI fetch failed: ${err.message}`);
       return;
@@ -168,10 +192,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     setVal("fcsm", k.avg_current, " A");
 
     // Aggregated
-    setVal("avg_feeder_voltage", k.avg_voltage,   " V");
-    setVal("avg_feeder_current", k.avg_current,   " A");
-    setVal("max_voltage",        k.max_voltage,   " V");
-    setVal("max_current",        k.max_current,   " A");
+    setVal("avg_feeder_voltage", k.avg_voltage, " V");
+    setVal("avg_feeder_current", k.avg_current, " A");
+    setVal("max_voltage",        k.max_voltage, " V");
+    setVal("max_current",        k.max_current, " A");
     setVal("total_records",      k.total_records);
   }
 
@@ -182,7 +206,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       updateKpis(substation, feeder, limit),
       createCharts(substation, feeder),
     ]);
-    updateMap(substation);
+    focusSubstation(substation);   // pan + panel, keeps overview markers
+  }
+
+  /* ── Select a substation (from map click OR dropdown) ─────────────────── */
+  async function onSelectSubstation(name) {
+    if (!name) return;
+    substationSelect.value    = name;
+    currentFilters.substation = name;
+    currentFilters.feeder     = null;
+    clearHint();
+    revealCharts();
+    renderFeeders(name, _cachedFilters);
+    await updateDashboard(name, null);
   }
 
   /* ── Clock ────────────────────────────────────────────────────────────── */
@@ -197,9 +233,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   /* ── Init ─────────────────────────────────────────────────────────────── */
   try {
     const filters = await loadFilters();
-    const sub = substationSelect.value;
-    renderFeeders(sub, filters);          // uses cached filters, no extra fetch
-    await updateDashboard(sub, null);
+    hideCharts();
+    showHint();
+    updateMapAll(filters.substations);          // overview of all locations
+    setMarkerSelectHandler(onSelectSubstation); // marker click → load charts
   } catch (err) {
     console.error("[ui] Init error:", err);
     showBanner(
@@ -213,24 +250,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   /* ── Events ───────────────────────────────────────────────────────────── */
-  substationSelect.addEventListener("change", async e => {
-    const sub = e.target.value;
-    currentFilters.substation = sub;
-    currentFilters.feeder     = null;
-    renderFeeders(sub, _cachedFilters);   // no extra fetch
-    await updateDashboard(sub, null);
-  });
+  substationSelect.addEventListener("change", e => onSelectSubstation(e.target.value));
 
   document.getElementById("refreshBtn").addEventListener("click", async () => {
-    _cachedFilters = null;   // force re-fetch of filters on manual refresh
+    _cachedFilters = null;
     try {
       const filters = await loadFilters();
-      renderFeeders(substationSelect.value, filters);
+      updateMapAll(filters.substations);
+      setMarkerSelectHandler(onSelectSubstation);
+      if (currentFilters.substation) {
+        substationSelect.value = currentFilters.substation;
+        renderFeeders(currentFilters.substation, filters);
+        clearHint();
+        revealCharts();
+        await updateDashboard(currentFilters.substation, currentFilters.feeder);
+      } else {
+        hideCharts();
+        showHint();
+      }
     } catch (err) {
       showBanner(`Refresh failed: ${err.message}`);
-      return;
     }
-    await updateDashboard(substationSelect.value, currentFilters.feeder);
   });
 
 });

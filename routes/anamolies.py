@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from typing import Optional
+
+from fastapi import APIRouter, Query
 import pandas as pd
 from sqlalchemy import text
 
@@ -9,23 +11,36 @@ router = APIRouter()
 
 
 @router.get("/")
-def get_anomalies():
-
-    query = """
-    SELECT *
-    FROM all_feeders
-    ORDER BY time DESC
-    LIMIT 5000
-    """
+def get_anomalies(
+    feeder: Optional[str] = Query(
+        None, description="Feeder display name, e.g. '11KV TAMHANI FEEDER'. "
+                           "Omit to check all feeders."
+    )
+):
+    if feeder:
+        query = """
+        SELECT *
+        FROM all_feeders
+        WHERE feeder = :feeder
+        ORDER BY time DESC
+        LIMIT 5000
+        """
+        params = {"feeder": feeder}
+    else:
+        query = """
+        SELECT *
+        FROM all_feeders
+        ORDER BY time DESC
+        LIMIT 5000
+        """
+        params = {}
 
     with engine.connect() as conn:
-        df = pd.read_sql(
-            text(query),
-            conn
-        )
+        df = pd.read_sql(text(query), conn, params=params)
 
-    anomalies = detect_anomalies(df)
+    if df.empty:
+        return []
 
-    return anomalies.tail(50).to_dict(
-        orient="records"
-    )
+    anomalies = detect_anomalies(df, feeder=feeder)
+
+    return anomalies.tail(50).to_dict(orient="records")

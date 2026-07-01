@@ -7,12 +7,11 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- ✅ FIXED: paths now point to /static/css/ -->
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -23,7 +22,6 @@
     <div class="tb-right">
       <div class="clock" id="clock"></div>
       <input class="search" placeholder="Search..." type="text">
-     
       <button class="icon-btn" id="refreshBtn">↻</button>
       <button class="icon-btn">⚙</button>
     </div>
@@ -40,15 +38,6 @@
       <div class="filter-label">Feeders</div>
       <div class="pill-group" id="feederPills"></div>
     </div>
-    <!-- <div class="separator"></div> -->
-    <!-- <div class="filter-group">
-      <div class="filter-label">Date Range</div>
-      <select class="filter-select">
-        <option>Last 12 Months</option>
-        <option>Last 6 Months</option>
-        <option>YTD</option>
-      </select>
-    </div> -->
   </div>
 
   <!-- MAIN -->
@@ -64,75 +53,60 @@
           <div class="live-badge">LIVE</div>
         </div>
         <div id="map"></div>
-       
 
-<div id="location-info" class="location-info">
-    <div>
-        <strong>Substation:</strong>
-        <span id="loc-name">--</span>
-    </div>
-
-    <div>
-        <strong>Latitude:</strong>
-        <span id="loc-lat">--</span>
-    </div>
-
-    <div>
-        <strong>Longitude:</strong>
-        <span id="loc-lng">--</span>
-    </div>
-</div>
+        <div id="location-info" class="location-info">
+          <div>
+            <strong>Substation:</strong>
+            <span id="loc-name">--</span>
+          </div>
+          <div>
+            <strong>Latitude:</strong>
+            <span id="loc-lat">--</span>
+          </div>
+          <div>
+            <strong>Longitude:</strong>
+            <span id="loc-lng">--</span>
+          </div>
+        </div>
       </div>
 
       <!-- KPI STACK -->
       <div class="kpi-stack">
-          <div class="kpi-row">
-  <div class="tile">
-    <div class="tile-code">FVHI</div>
-    <div class="tile-value" id="fvhi">—</div>
-    <div class="tile-label">Voltage Surge Incidents</div>
-  </div>
-
-  <div class="tile">
-    <div class="tile-code">FVHD</div>
-    <div class="tile-value" id="fvhd">—</div>
-    <div class="tile-label">High Voltage Duration (min)</div>
-  </div>
-
-  <div class="tile">
-    <div class="tile-code">FVLI</div>
-    <div class="tile-value" id="fvli">—</div>
-    <div class="tile-label">Voltage Dip Incidents</div>
-  </div>
-
-  <div class="tile">
-    <div class="tile-code">FVLD</div>
-    <div class="tile-value" id="fvld">—</div>
-    <div class="tile-label">Low Voltage Duration (min)</div>
-  </div>
-
-  <div class="tile">
-    <div class="tile-code">FVSM</div>
-    <div class="tile-value" id="fvsm">—</div>
-    <div class="tile-label">Average Voltage (kV)</div>
-  </div>
-</div>
-        <!-- <div class="kpi-section-title">Voltage Metrics</div>
         <div class="kpi-row">
-          <div class="tile"><div class="tile-code">FVHI</div><div class="tile-value" id="fvhi">—</div><div class="tile-label">High Indicator</div></div>
-          <div class="tile"><div class="tile-code">FVHD</div><div class="tile-value" id="fvhd">—</div><div class="tile-label">High Deviation</div></div>
-          <div class="tile"><div class="tile-code">FVLI</div><div class="tile-value" id="fvli">—</div><div class="tile-label">Low Indicator</div></div>
-          <div class="tile"><div class="tile-code">FVLD</div><div class="tile-value" id="fvld">—</div><div class="tile-label">Low Deviation</div></div>
-          <div class="tile"><div class="tile-code">FVSM</div><div class="tile-value" id="fvsm">—</div><div class="tile-label">Sum</div></div>
-        </div> -->
+          <div class="tile">
+            <div class="tile-code">FVHI</div>
+            <div class="tile-value" id="fvhi">—</div>
+            <div class="tile-label">Voltage Surge Incidents</div>
+          </div>
+          <div class="tile">
+            <div class="tile-code">FVHD</div>
+            <div class="tile-value" id="fvhd">—</div>
+            <div class="tile-label">High Voltage Duration</div>
+          </div>
+          <div class="tile">
+            <div class="tile-code">FVLI</div>
+            <div class="tile-value" id="fvli">—</div>
+            <div class="tile-label">Voltage Dip Incidents</div>
+          </div>
+          <div class="tile">
+            <div class="tile-code">FVLD</div>
+            <div class="tile-value" id="fvld">—</div>
+            <div class="tile-label">Low Voltage Duration</div>
+          </div>
+          <div class="tile">
+            <div class="tile-code">FVSM</div>
+            <div class="tile-value" id="fvsm">—</div>
+            <div class="tile-label">Average Voltage (kV)</div>
+          </div>
+        </div>
 
         <div class="kpi-section-title">Current Metrics</div>
         <div class="kpi-row">
-          <div class="tile"><div class="tile-code">FCHI</div><div class="tile-value" id="fchi">—</div><div class="tile-label">High Indicator</div></div>
-          <div class="tile"><div class="tile-code">FCHD</div><div class="tile-value" id="fchd">—</div><div class="tile-label">High Deviation</div></div>
-          <div class="tile"><div class="tile-code">FCLI</div><div class="tile-value" id="fcli">—</div><div class="tile-label">Low Indicator</div></div>
-          <div class="tile"><div class="tile-code">FCLD</div><div class="tile-value" id="fcld">—</div><div class="tile-label">Low Deviation</div></div>
-          <div class="tile"><div class="tile-code">FCSM</div><div class="tile-value" id="fcsm">—</div><div class="tile-label">Sum</div></div>
+          <div class="tile"><div class="tile-code">FCHI</div><div class="tile-value" id="fchi">—</div><div class="tile-label">Current Surge Incidents</div></div>
+          <div class="tile"><div class="tile-code">FCHD</div><div class="tile-value" id="fchd">—</div><div class="tile-label">High Current Duration</div></div>
+          <div class="tile"><div class="tile-code">FCLI</div><div class="tile-value" id="fcli">—</div><div class="tile-label">Current Dip Incidents</div></div>
+          <div class="tile"><div class="tile-code">FCLD</div><div class="tile-value" id="fcld">—</div><div class="tile-label">Low Current Duration</div></div>
+          <div class="tile"><div class="tile-code">FCSM</div><div class="tile-value" id="fcsm">—</div><div class="tile-label">Average Current</div></div>
         </div>
 
         <div class="kpi-section-title">Aggregated Metrics</div>
@@ -143,7 +117,6 @@
           <div class="tile"><div class="tile-code">Max Current (A)</div><div class="tile-value" id="max_current">—</div><div class="tile-label">Maximum</div></div>
           <div class="tile"><div class="tile-code">Records</div><div class="tile-value" id="total_records">—</div><div class="tile-label">Total Count</div></div>
         </div>
-
       </div>
     </div>
 
@@ -182,7 +155,6 @@
   </div>
 
   <!-- SCRIPTS -->
-  <!-- ✅ FIXED: all paths now /static/js/ -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/map.js"></script>
