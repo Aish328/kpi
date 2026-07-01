@@ -7,17 +7,27 @@
  *   3. Deterministic fallback inside India if geocoding fails
  */
 
-let _map          = null;
-let _markerLayer  = null;
-const _geoCache   = {};   // name → [lat, lng]
+let _map = null;
+let _markerLayer = null;
+const _geoCache = {};   // name → [lat, lng]
 
 // ── 1. Known coordinates ─────────────────────────────────────────────────────
 // Add entries here matching your exact substation names (case-sensitive).
 // Example:
 //   "Shahdara 220kV":  [28.6692, 77.2942],
 //   "Mundka 66kV":     [28.6815, 76.9986],
-const SUBSTATION_COORDS = {
-  // "MY_SUB": [lat, lng],
+const SUBSTATION_COORDS = {// ── 1. Known coordinates ─────────────────────────────────────────────────────
+  // Pune district / Mulshi area (verify with actual GIS coordinates)
+  "22/11 KV MALE SUBSTAION": [18.4500, 73.4500],
+
+  // Embassy business park region
+  "33/11 KV EMBASSY PARK": [12.9595, 77.6974],
+
+  // Alias used by dashboard
+  "EMBASSY PARK": [12.9595, 77.6974],
+
+  // Malwadi substation
+  "MALWADI SUB STN": [18.5100, 73.8600]
 };
 
 // ── 2. Geocode via Nominatim ─────────────────────────────────────────────────
@@ -82,38 +92,97 @@ function _makeIcon(color = "#00e5d4") {
 }
 
 // ── Public: update map for a given substation ────────────────────────────────
+
 async function updateMap(substation) {
+  console.log("updateMap called with:", substation);
+
   if (!_map) initMap();
+
   _markerLayer.clearLayers();
 
   const label = substation || "All Substations";
 
-  // Resolve coordinates
+  // 1. Try known coordinates
   let coords = SUBSTATION_COORDS[substation] || null;
 
+  // 2. Try geocoding if not found
   if (!coords && substation) {
-    // Show a loading marker while geocoding
     const provisional = _fallbackCoords(substation);
-    const loadingIcon = _makeIcon("#888");
-    L.marker(provisional, { icon: loadingIcon })
-      .bindPopup(`<b style="color:#aaa">${label}</b><br><i>Locating…</i>`)
+
+    L.marker(provisional, { icon: _makeIcon("#888") })
+      .bindPopup(
+        `<b style="color:#aaa">${label}</b><br><i>Locating...</i>`
+      )
       .addTo(_markerLayer);
+
     _map.setView(provisional, 6);
 
     coords = await _geocode(substation);
 
-    // Remove provisional marker
     _markerLayer.clearLayers();
   }
 
+  // 3. Final fallback
   if (!coords) {
-    coords = substation ? _fallbackCoords(substation) : [22.5, 82.3];
+    coords = substation
+      ? _fallbackCoords(substation)
+      : [22.5, 82.3];
   }
 
+  // Cache coordinates
   _geoCache[substation || "DEFAULT"] = coords;
+  console.log("===== LOCATION PANEL DEBUG =====");
 
+console.log(
+    "loc-name:",
+    document.getElementById("loc-name")
+);
+
+console.log(
+    "loc-lat:",
+    document.getElementById("loc-lat")
+);
+
+console.log(
+    "loc-lng:",
+    document.getElementById("loc-lng")
+);
+
+  console.log("MAP UPDATE:", label, coords);
+
+  // Update location information panel
+  const panel = document.getElementById("location-info");
+
+  if (panel) {
+    panel.innerHTML = `
+      <div>
+        <strong>Substation</strong>
+        <span>${label}</span>
+      </div>
+
+      <div>
+        <strong>Latitude</strong>
+        <span>${coords[0].toFixed(6)}</span>
+      </div>
+
+      <div>
+        <strong>Longitude</strong>
+        <span>${coords[1].toFixed(6)}</span>
+      </div>
+    `;
+  } else {
+    console.warn("location-info panel not found");
+  }
+
+  // Create marker
   L.marker(coords, { icon: _makeIcon() })
-    .bindPopup(`<b style="color:#00e5d4">${label}</b>`)
+    .bindPopup(`
+      <div>
+        <b style="color:#00e5d4">${label}</b><br>
+        Latitude: ${coords[0].toFixed(6)}<br>
+        Longitude: ${coords[1].toFixed(6)}
+      </div>
+    `)
     .addTo(_markerLayer)
     .openPopup();
 
@@ -136,7 +205,13 @@ async function updateMapAll(substations) {
       _geoCache[name] = coords;
     }
     L.marker(coords, { icon: _makeIcon() })
-      .bindPopup(`<b style="color:#00e5d4">${name}</b>`)
+      .bindPopup(`
+      <div style="color:white">
+      <b style="color:#00e5d4">${name}</b><br>
+      <b>Latitude:</b> ${coords[0].toFixed(6)}<br>
+      <b>Longitude:</b> ${coords[1].toFixed(6)}
+      </div>
+      `)
       .addTo(_markerLayer);
     bounds.push(coords);
   }));

@@ -23,7 +23,7 @@
     <div class="tb-right">
       <div class="clock" id="clock"></div>
       <input class="search" placeholder="Search..." type="text">
-      <button class="ml-btn" onclick="location.href='/ml'">FORECAST</button>
+     
       <button class="icon-btn" id="refreshBtn">↻</button>
       <button class="icon-btn">⚙</button>
     </div>
@@ -64,6 +64,24 @@
           <div class="live-badge">LIVE</div>
         </div>
         <div id="map"></div>
+       
+
+<div id="location-info" class="location-info">
+    <div>
+        <strong>Substation:</strong>
+        <span id="loc-name">--</span>
+    </div>
+
+    <div>
+        <strong>Latitude:</strong>
+        <span id="loc-lat">--</span>
+    </div>
+
+    <div>
+        <strong>Longitude:</strong>
+        <span id="loc-lng">--</span>
+    </div>
+</div>
       </div>
 
       <!-- KPI STACK -->
